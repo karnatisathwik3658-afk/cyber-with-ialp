@@ -1,0 +1,11 @@
+DataSet/*
+!DataSet/kddcup.data.cleaned.txt
+notebooks/
+results/
+.git/
+.venv/
+venv/
+__pycache__/
+*.pyc
+app_backup.py
+app_code_backup.txt

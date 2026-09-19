@@ -229,7 +229,6 @@ BASE_DIR = Path(__file__).resolve().parent
 RF_MODEL_PATH = BASE_DIR / "models" / "random_forest_model.pkl"
 ENCODER_PATH = BASE_DIR / "models" / "ordinal_encoder.pkl"
 XGB_MODEL_PATH = BASE_DIR / "models" / "xgboost_model.json"
-IF_MODEL_PATH = BASE_DIR / "models" / "isolation_forest_model.pkl"
 DATASET_PATH = BASE_DIR / "DataSet" / "kddcup.data.cleaned.txt"
 
 COLUMNS = [
@@ -264,9 +263,7 @@ def load_models():
     xgb_model = XGBClassifier()
     xgb_model.load_model(str(XGB_MODEL_PATH))
 
-    isolation_forest = joblib.load(IF_MODEL_PATH)
-
-    return rf_model, encoder, xgb_model, isolation_forest
+    return rf_model, encoder, xgb_model
 
 
 @st.cache_data
@@ -340,7 +337,6 @@ required_files = [
     RF_MODEL_PATH,
     ENCODER_PATH,
     XGB_MODEL_PATH,
-    IF_MODEL_PATH,
     DATASET_PATH,
 ]
 
@@ -352,7 +348,7 @@ if missing_files:
         st.write(f"- `{missing_file}`")
     st.stop()
 
-rf_model, encoder, xgb_model, isolation_forest = load_models()
+rf_model, encoder, xgb_model = load_models()
 
 # ============================================================
 # SIDEBAR
@@ -375,7 +371,7 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    st.caption("Built with Python, Streamlit, Random Forest, XGBoost and Isolation Forest")
+    st.caption("Built with Python, Streamlit, Random Forest and XGBoost")
 
 # ============================================================
 # TOP BAR
@@ -514,24 +510,10 @@ elif page == "🔍 Predict":
         rf_result = prediction_label(rf_model.predict(input_data)[0])
         xgb_result = prediction_label(xgb_model.predict(input_data)[0])
 
-        if_prediction = isolation_forest.predict(input_data)[0]
-        if_result = "Anomaly" if if_prediction == -1 else "Normal"
-
         actual_type = selected_record["attack_type"]
         actual_result = "Normal" if actual_type == "normal." else "Attack"
 
-        # Convert all three model outputs to the same binary labels
-        # so their agreement can be evaluated consistently.
-        if_label = "Attack" if if_result == "Anomaly" else "Normal"
-        model_labels = [rf_result, xgb_result, if_label]
-        attack_votes = model_labels.count("Attack")
-        normal_votes = model_labels.count("Normal")
-        majority_label = "Attack" if attack_votes >= normal_votes else "Normal"
-        agreement_count = max(attack_votes, normal_votes)
-        agreement_type = "Unanimous" if agreement_count == 3 else "Majority"
-        if_alignment = "Aligned" if if_label == majority_label else "Different"
-
-        result_cols = st.columns(3)
+        result_cols = st.columns(2)
 
         with result_cols[0]:
             if rf_result == "Attack":
@@ -556,36 +538,18 @@ elif page == "🔍 Predict":
                     '<div class="status-normal">🤖 XGBoost<br>NORMAL</div>',
                     unsafe_allow_html=True,
                 )
-        with result_cols[2]:
-            if if_result == "Anomaly":
-                st.markdown(
-                    '<div class="status-attack">🔎 Isolation Forest<br>ANOMALY</div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    '<div class="status-normal">🔎 Isolation Forest<br>NORMAL</div>',
-                    unsafe_allow_html=True,
-                )
 
         st.markdown(
             '<div class="section-card"><div class="section-title">📌 Actual Information</div></div>',
             unsafe_allow_html=True,
         )
 
-        info_cols = st.columns(4)
+        info_cols = st.columns(3)
         info_cols[0].metric("Actual Attack Type", actual_type)
         info_cols[1].metric("Actual Label", actual_result)
         info_cols[2].metric(
             "Model Agreement",
-            f"{agreement_count}/3",
-            delta=agreement_type,
-        )
-        info_cols[3].metric("Majority Decision", majority_label)
-
-        st.caption(
-            f"Random Forest: {rf_result} • XGBoost: {xgb_result} • "
-            f"Isolation Forest: {if_label} • Isolation Forest alignment: {if_alignment}"
+            "Yes" if rf_result == xgb_result else "No",
         )
 
 # ============================================================

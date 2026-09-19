@@ -15,3 +15,9 @@ venv/
 
 # Secrets
 .env
+
+# Entire dataset folder
+DataSet/
+
+# Local backup file
+app_code_backup.txt
