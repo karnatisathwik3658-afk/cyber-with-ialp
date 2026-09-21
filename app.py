@@ -333,6 +333,75 @@ def prediction_label(value):
     return "Attack" if int(value) == 1 else "Normal"
 
 
+def normalize_uploaded_csv(uploaded_df):
+    """Convert raw KDD-style or one-hot encoded CSV rows to the app's 41-column format."""
+    data = uploaded_df.copy()
+    data.columns = [str(column).strip() for column in data.columns]
+
+    # Remove common target/label columns from the feature frame.
+    label_series = None
+    for label_column in ["attack_type", "label", "target", "class"]:
+        if label_column in data.columns:
+            label_series = data[label_column].copy()
+            break
+
+    # Case 1: raw KDD-style data already contains the three categorical columns.
+    if all(column in data.columns for column in CATEGORICAL_COLUMNS):
+        normalized = pd.DataFrame(index=data.index)
+        for column in COLUMNS[:-1]:
+            normalized[column] = data[column] if column in data.columns else 0
+        normalized["attack_type"] = label_series if label_series is not None else "unknown"
+        return normalized, "raw KDD-style"
+
+    # Case 2: one-hot encoded CSV such as mixed_test.csv.xls/test_data.csv.xls.
+    normalized = pd.DataFrame(index=data.index)
+    for column in COLUMNS[:-1]:
+        if column not in CATEGORICAL_COLUMNS:
+            normalized[column] = pd.to_numeric(data[column], errors="coerce") if column in data.columns else 0
+
+    for categorical in CATEGORICAL_COLUMNS:
+        prefix = categorical + "_"
+        encoded_columns = [column for column in data.columns if column.startswith(prefix)]
+        if encoded_columns:
+            # Pick the active one-hot category. If a row has no active category,
+            # use the encoder's first known category as a safe fallback.
+            values = data[encoded_columns].apply(pd.to_numeric, errors="coerce").fillna(0)
+            selected = values.idxmax(axis=1).str[len(prefix):]
+            no_active = values.max(axis=1).eq(0)
+            categories = list(encoder.categories_[CATEGORICAL_COLUMNS.index(categorical)])
+            fallback = categories[0] if categories else "unknown"
+            selected = selected.where(~no_active, fallback)
+            normalized[categorical] = selected
+        else:
+            normalized[categorical] = "unknown"
+
+    normalized["attack_type"] = label_series if label_series is not None else "unknown"
+    return normalized[COLUMNS], "one-hot encoded"
+
+
+def classify_dataframe(dataframe):
+    """Run all three models for every uploaded row."""
+    results = []
+    for _, record in dataframe.iterrows():
+        input_data = prepare_input(record)
+        rf_result = prediction_label(rf_model.predict(input_data)[0])
+        xgb_result = prediction_label(xgb_model.predict(input_data)[0])
+        if_result = "Anomaly" if isolation_forest.predict(input_data)[0] == -1 else "Normal"
+        if_label = "Attack" if if_result == "Anomaly" else "Normal"
+        labels = [rf_result, xgb_result, if_label]
+        attack_votes = labels.count("Attack")
+        normal_votes = labels.count("Normal")
+        majority = "Attack" if attack_votes >= normal_votes else "Normal"
+        results.append({
+            "Random Forest": rf_result,
+            "XGBoost": xgb_result,
+            "Isolation Forest": if_result,
+            "Majority Decision": majority,
+            "Model Agreement": f"{max(attack_votes, normal_votes)}/3",
+        })
+    return pd.DataFrame(results, index=dataframe.index)
+
+
 # ============================================================
 # FILE VALIDATION
 # ============================================================
@@ -371,11 +440,11 @@ with st.sidebar:
 
     page = st.radio(
         "Navigation",
-        ["🏠 Home", "🔍 Predict", "📊 Analytics", "🗃️ Dataset", "🧠 Models", "ℹ️ About"],
+        ["🏠 Home", "🔍 Predict", "📁 CSV Scan", "📊 Analytics", "🗃️ Dataset", "🧠 Models", "ℹ️ About"],
     )
 
     st.markdown("---")
-    st.caption("Built with Python, Streamlit, Random Forest, XGBoost and Isolation Forest")
+    st.caption("Built with Python, Streamlit, Random Forest and XGBoost")
 
 # ============================================================
 # TOP BAR
@@ -587,6 +656,94 @@ elif page == "🔍 Predict":
             f"Random Forest: {rf_result} • XGBoost: {xgb_result} • "
             f"Isolation Forest: {if_label} • Isolation Forest alignment: {if_alignment}"
         )
+
+# ============================================================
+# CSV SCAN PAGE
+# ============================================================
+elif page == "📁 CSV Scan":
+    st.markdown(
+        """
+        <div class="hero">
+            <h1>📁 CSV <span>Traffic Scanner</span></h1>
+            <p>Upload KDD-style or one-hot encoded network traffic records and inspect them with all three models.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.info("Supported input: raw KDD-style CSV or one-hot encoded CSV with network features. Label columns are used only for optional comparison and are never sent to the models.")
+    uploaded_file = st.file_uploader("Upload network traffic CSV", type=["csv", "xls"])
+
+    if uploaded_file is not None:
+        try:
+            uploaded_data = pd.read_csv(uploaded_file)
+            st.write(f"**Uploaded records:** {len(uploaded_data):,}  |  **Columns:** {len(uploaded_data.columns):,}")
+            st.dataframe(uploaded_data.head(10), use_container_width=True)
+
+            normalized_data, input_format = normalize_uploaded_csv(uploaded_data)
+            st.success(f"Detected input format: {input_format}. Ready to scan {len(normalized_data):,} records.")
+
+            if st.button("🛡️ Scan Uploaded CSV", type="primary"):
+                with st.spinner("Running Random Forest, XGBoost, and Isolation Forest..."):
+                    predictions = classify_dataframe(normalized_data)
+
+                output = uploaded_data.reset_index(drop=True).copy()
+                prediction_output = predictions.reset_index(drop=True)
+                output = pd.concat([output, prediction_output], axis=1)
+
+                attack_count = int((prediction_output["Majority Decision"] == "Attack").sum())
+                normal_count = len(prediction_output) - attack_count
+
+                metric_cols = st.columns(3)
+                metric_cols[0].metric("Scanned Records", f"{len(output):,}")
+                metric_cols[1].metric("Detected Attacks", f"{attack_count:,}")
+                metric_cols[2].metric("Detected Normal", f"{normal_count:,}")
+
+                # Show the three model predictions prominently before the full dataset.
+                st.subheader("Individual Model Predictions")
+                prediction_columns = [
+                    "Random Forest",
+                    "XGBoost",
+                    "Isolation Forest",
+                    "Majority Decision",
+                    "Model Agreement",
+                ]
+                st.dataframe(
+                    output[prediction_columns].reset_index(drop=True),
+                    use_container_width=True,
+                    height=420,
+                )
+
+                st.subheader("Model-wise Summary")
+                summary_rows = []
+                for model_name in ["Random Forest", "XGBoost", "Isolation Forest"]:
+                    counts = prediction_output[model_name].value_counts()
+                    summary_rows.append(
+                        {
+                            "Model": model_name,
+                            "Attack": int(counts.get("Attack", 0)),
+                            "Normal": int(counts.get("Normal", 0)),
+                            "Anomaly": int(counts.get("Anomaly", 0)),
+                        }
+                    )
+                st.dataframe(pd.DataFrame(summary_rows), use_container_width=True)
+
+                st.subheader("Complete Detection Results")
+                st.dataframe(output, use_container_width=True, height=500)
+
+                st.subheader("Detection Summary")
+                st.bar_chart(prediction_output["Majority Decision"].value_counts())
+
+                csv_bytes = output.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Download Detection Results",
+                    data=csv_bytes,
+                    file_name="cyber_ialp_detection_results.csv",
+                    mime="text/csv",
+                )
+        except Exception as error:
+            st.error(f"Could not inspect this CSV: {error}")
+            st.caption("Check that the file contains the required KDD network feature columns or the expected one-hot encoded columns.")
 
 # ============================================================
 # ANALYTICS PAGE
