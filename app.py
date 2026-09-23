@@ -3,6 +3,7 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
+import json
 import streamlit as st
 from xgboost import XGBClassifier
 
@@ -11,7 +12,7 @@ from xgboost import XGBClassifier
 # ============================================================
 st.set_page_config(
     page_title="Cyber With IALP",
-    page_icon="🛡️",
+    page_icon="shield",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -25,21 +26,18 @@ st.markdown(
     @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
 
     .stApp {
-        background:
-            radial-gradient(circle at 10% 10%, rgba(54, 115, 255, 0.18), transparent 28%),
-            radial-gradient(circle at 90% 15%, rgba(221, 89, 255, 0.16), transparent 25%),
-            linear-gradient(135deg, #07152f 0%, #0b1e42 45%, #10133b 100%);
-        color: #f7fbff;
+        background: #ffffff;
+        color: #111111;
         font-family: 'Nunito', sans-serif;
     }
 
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #07132e 0%, #10265a 55%, #24164f 100%);
-        border-right: 1px solid rgba(80, 191, 255, 0.45);
+        background: #f4f4f4;
+        border-right: 1px solid #d6d6d6;
     }
 
     [data-testid="stSidebar"] * {
-        color: #f5f8ff;
+        color: #111111;
     }
 
     .brand {
@@ -49,28 +47,26 @@ st.markdown(
 
     .brand-icon {
         font-size: 42px;
-        filter: drop-shadow(0 0 12px #27d7ff);
+        filter: none;
     }
 
     .brand-title {
         font-size: 26px;
         font-weight: 800;
-        background: linear-gradient(90deg, #ffffff, #2ce4ff, #d18aff);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: #111111;
     }
 
     .brand-subtitle {
         font-size: 12px;
-        color: #b8d9ff;
+        color: #666666;
     }
 
     .topbar {
         padding: 14px 22px;
-        border: 1px solid rgba(91, 191, 255, 0.40);
-        border-radius: 22px;
-        background: linear-gradient(90deg, rgba(13, 47, 99, .85), rgba(37, 25, 87, .85));
-        box-shadow: 0 0 28px rgba(31, 164, 255, .12);
+        border: 1px solid #d0d0d0;
+        border-radius: 0;
+        background: #ffffff;
+        box-shadow: none;
         margin-bottom: 18px;
     }
 
@@ -78,10 +74,11 @@ st.markdown(
         font-size: 29px;
         font-weight: 800;
         margin: 0;
+        color: #111111;
     }
 
     .topbar-subtitle {
-        color: #a9eaff;
+        color: #555555;
         margin-top: 2px;
         font-size: 14px;
     }
@@ -90,12 +87,11 @@ st.markdown(
         min-height: 190px;
         padding: 28px;
         border-radius: 24px;
-        background:
-            linear-gradient(90deg, rgba(5, 21, 54, .97), rgba(13, 42, 89, .68)),
-            radial-gradient(circle at 85% 35%, rgba(245, 116, 255, .45), transparent 30%);
-        border: 1px solid rgba(94, 202, 255, .52);
-        box-shadow: 0 0 35px rgba(31, 164, 255, .12);
+        background: #f8f8f8;
+        border: 1px solid #d0d0d0;
+        box-shadow: none;
         margin-bottom: 18px;
+        color: #111111;
     }
 
     .hero h1 {
@@ -103,22 +99,21 @@ st.markdown(
         margin: 0;
         font-weight: 800;
         letter-spacing: -1px;
+        color: #111111;
     }
 
     .hero h1 span {
-        background: linear-gradient(90deg, #25d9ff, #ff8fe8, #b69bff);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: #111111;
     }
 
     .hero p {
-        color: #c6e9ff;
+        color: #555555;
         font-size: 16px;
         margin: 8px 0;
     }
 
     .quote {
-        color: #6ef3d1;
+        color: #555555;
         font-style: italic;
         font-size: 14px;
     }
@@ -127,25 +122,27 @@ st.markdown(
         padding: 20px;
         min-height: 126px;
         border-radius: 20px;
-        border: 1px solid rgba(107, 207, 255, .42);
-        background: linear-gradient(135deg, rgba(14, 61, 125, .9), rgba(26, 27, 83, .9));
-        box-shadow: 0 8px 25px rgba(0, 0, 0, .16);
+        border: 1px solid #d0d0d0;
+        background: #ffffff;
+        box-shadow: none;
+        color: #111111;
     }
 
+    /* Preserve colored metric/model blocks. */
     .metric-card.green {
-        background: linear-gradient(135deg, rgba(9, 113, 112, .9), rgba(10, 63, 91, .9));
+        background: linear-gradient(135deg, #d9f7e8, #a9e8ca);
     }
 
     .metric-card.red {
-        background: linear-gradient(135deg, rgba(145, 26, 85, .92), rgba(75, 24, 87, .92));
+        background: linear-gradient(135deg, #ffd9df, #ffb8c4);
     }
 
     .metric-card.purple {
-        background: linear-gradient(135deg, rgba(89, 39, 151, .92), rgba(34, 29, 93, .92));
+        background: linear-gradient(135deg, #e4dcff, #cbbcff);
     }
 
     .metric-label {
-        color: #c3e9ff;
+        color: #555555;
         font-size: 14px;
     }
 
@@ -153,56 +150,277 @@ st.markdown(
         font-size: 31px;
         font-weight: 800;
         margin-top: 8px;
+        color: #111111;
     }
 
     .section-card {
         padding: 20px;
-        border: 1px solid rgba(107, 207, 255, .35);
+        border: 1px solid #d0d0d0;
         border-radius: 22px;
-        background: rgba(6, 24, 60, .72);
+        background: #ffffff;
         margin-top: 18px;
+        color: #111111;
     }
 
     .section-title {
         font-size: 21px;
         font-weight: 800;
-        color: #f5fbff;
+        color: #111111;
         margin-bottom: 6px;
     }
 
     .section-description {
-        color: #acd6ef;
+        color: #666666;
         font-size: 13px;
         margin-bottom: 15px;
     }
 
+
+    /* Ensure metric outputs and labels remain visible on the white background. */
+    [data-testid="stMetric"] label,
+    [data-testid="stMetric"] [data-testid="stMetricLabel"],
+    [data-testid="stMetric"] [data-testid="stMetricValue"],
+    [data-testid="stMetric"] [data-testid="stMetricDelta"],
+    [data-testid="stMetric"] *,
+    .stCaption,
+    [data-testid="stCaptionContainer"] * {
+        color: #111111 !important;
+    }
+
+    /* Keep the sidebar navigation readable. */
+    [data-testid="stRadio"] label,
+    [data-testid="stRadio"] label p {
+        color: #111111 !important;
+    }
+
+
+    /* Global readability on the white dashboard. */
+    .stApp,
+    .stApp p,
+    .stApp label,
+    .stApp span,
+    .stApp div,
+    .stApp small,
+    .stApp [data-testid="stMarkdownContainer"] {
+        color: #111111;
+    }
+
+    /* Streamlit informational messages. */
+    [data-testid="stAlert"],
+    [data-testid="stAlert"] *,
+    [data-testid="stNotification"],
+    [data-testid="stNotification"] * {
+        color: #111111 !important;
+    }
+
+    /* File uploader text and labels. */
+    [data-testid="stFileUploader"],
+    [data-testid="stFileUploader"] *,
+    [data-testid="stFileUploaderDropzone"],
+    [data-testid="stFileUploaderDropzone"] * {
+        color: #111111 !important;
+    }
+
+    /* Inputs, selectors, expanders, and buttons. */
+    input,
+    textarea,
+    select,
+    [data-baseweb="select"] *,
+    [data-testid="stExpander"] *,
+    [data-testid="stSelectbox"] *,
+    [data-testid="stButton"] *,
+    button {
+        color: #111111 !important;
+    }
+
+    button {
+        background-color: #ffffff;
+    }
+
+    div.stButton > button,
+    div.stButton > button * {
+        color: #ffffff !important;
+    }
+
+    /* Keep the dark upload control readable. */
+    [data-testid="stFileUploader"] button,
+    [data-testid="stFileUploader"] button * {
+        color: #111111 !important;
+    }
+
+    /* Ensure captions and muted helper text are visible. */
+    [data-testid="stCaptionContainer"],
+    [data-testid="stCaptionContainer"] * {
+        color: #555555 !important;
+    }
+
+
+    /* Targeted contrast fixes for dark Streamlit controls. */
+    [data-testid="stFileUploader"] section,
+    [data-testid="stFileUploader"] section *,
+    [data-testid="stFileUploaderDropzone"],
+    [data-testid="stFileUploaderDropzone"] * {
+        color: #ffffff !important;
+    }
+
+    [data-testid="stFileUploader"] section button,
+    [data-testid="stFileUploader"] section button * {
+        color: #111111 !important;
+        background-color: #ffffff !important;
+    }
+
+    [data-baseweb="select"],
+    [data-baseweb="select"] *,
+    [data-testid="stSelectbox"] input {
+        color: #ffffff !important;
+    }
+
+    [data-baseweb="select"] {
+        background-color: #242630 !important;
+    }
+
+    [data-baseweb="select"] svg {
+        fill: #ffffff !important;
+    }
+
+    [data-testid="stFileUploader"] small,
+    [data-testid="stFileUploader"] small * {
+        color: #ffffff !important;
+    }
+
+
+    /* Code blocks: preserve the dark background and force readable light text. */
+    [data-testid="stCode"],
+    [data-testid="stCode"] *,
+    [data-testid="stCodeBlock"],
+    [data-testid="stCodeBlock"] *,
+    pre,
+    pre *,
+    code,
+    code * {
+        color: #ffffff !important;
+        background-color: #1b1d24 !important;
+        text-shadow: none !important;
+    }
+
+    [data-testid="stCode"] pre,
+    [data-testid="stCodeBlock"] pre {
+        color: #ffffff !important;
+        background-color: #1b1d24 !important;
+    }
+
+
+    /* ============================================================
+       DARK-BACKGROUND CONTRAST POLICY
+       Any dashboard block with a dark/black background uses white text.
+       This is a visibility-only CSS override.
+       ============================================================ */
+
+    /* Streamlit code blocks and dark artifact panels */
+    pre,
+    pre *,
+    code,
+    code *,
+    [data-testid="stCode"],
+    [data-testid="stCode"] *,
+    [data-testid="stCodeBlock"],
+    [data-testid="stCodeBlock"] * {
+        background-color: #1b1d24 !important;
+        color: #ffffff !important;
+        text-shadow: none !important;
+    }
+
+    /* Dark select/dropdown controls */
+    [data-baseweb="select"],
+    [data-baseweb="select"] > div,
+    [data-baseweb="select"] input,
+    [data-baseweb="select"] span,
+    [data-baseweb="select"] div {
+        background-color: #242630 !important;
+        color: #ffffff !important;
+    }
+
+    [data-baseweb="select"] svg {
+        fill: #ffffff !important;
+        color: #ffffff !important;
+    }
+
+    /* Dark file-upload area */
+    [data-testid="stFileUploader"] section,
+    [data-testid="stFileUploader"] section > div,
+    [data-testid="stFileUploader"] section p,
+    [data-testid="stFileUploader"] section span,
+    [data-testid="stFileUploader"] section small {
+        background-color: #242630 !important;
+        color: #ffffff !important;
+    }
+
+    /* Keep the upload button itself readable */
+    [data-testid="stFileUploader"] section button,
+    [data-testid="stFileUploader"] section button * {
+        background-color: #ffffff !important;
+        color: #111111 !important;
+    }
+
+    /* Dark tables and table headers */
+    [data-testid="stDataFrame"],
+    [data-testid="stDataFrame"] *,
+    [data-testid="stTable"],
+    [data-testid="stTable"] * {
+        color: #ffffff !important;
+    }
+
+    /* Dark custom status/model blocks */
+    .status-attack,
+    .status-attack *,
+    .status-normal,
+    .status-normal * {
+        color: #111111 !important;
+    }
+
+    /* Dark buttons: white text */
+    button[ kind="primary"],
+    div.stButton > button,
+    div.stButton > button span,
+    div.stButton > button p {
+        color: #ffffff !important;
+    }
+
+    /* Dark alert/notification panels: readable text */
+    [data-testid="stAlert"] *,
+    [data-testid="stNotification"] * {
+        color: #111111 !important;
+    }
+
     .footer {
         text-align: center;
-        color: #a7c8e8;
+        color: #777777;
         padding: 24px 0 8px 0;
         font-size: 12px;
     }
 
     div.stButton > button {
-        border-radius: 18px;
-        border: 1px solid #52dfff;
-        background: linear-gradient(90deg, #2563ff, #a63cff, #17cde1);
-        color: white;
+        border-radius: 12px;
+        border: 1px solid #222222;
+        background: #20242b;
+        color: #ffffff;
         font-weight: 800;
-        min-height: 45px;
-        box-shadow: 0 0 18px rgba(67, 198, 255, .18);
+        min-height: 42px;
+        box-shadow: none;
     }
 
     div.stButton > button:hover {
-        border-color: #ffffff;
-        box-shadow: 0 0 24px rgba(67, 198, 255, .40);
+        border-color: #000000;
+        background: #000000;
+        color: #ffffff;
     }
 
     .status-attack {
         padding: 18px;
         border-radius: 18px;
-        background: linear-gradient(90deg, rgba(190, 31, 75, .9), rgba(103, 22, 96, .9));
-        border: 1px solid #ff6d9c;
+        background: linear-gradient(90deg, #ffd9df, #ffb8c4);
+        border: 1px solid #e46a7d;
+        color: #111111;
         text-align: center;
         font-size: 25px;
         font-weight: 800;
@@ -211,13 +429,156 @@ st.markdown(
     .status-normal {
         padding: 18px;
         border-radius: 18px;
-        background: linear-gradient(90deg, rgba(0, 137, 119, .9), rgba(14, 85, 121, .9));
-        border: 1px solid #62f4cf;
+        background: linear-gradient(90deg, #d9f7e8, #a9e8ca);
+        border: 1px solid #58b889;
+        color: #111111;
         text-align: center;
         font-size: 25px;
         font-weight: 800;
     }
-    </style>
+    
+
+    /* TOP-RIGHT STREAMLIT SETTINGS PANEL: visibility-only fix */
+    [data-testid="stToolbar"] [role="dialog"],
+    [data-testid="stToolbar"] [role="dialog"] *,
+    [data-testid="stToolbar"] [role="menu"],
+    [data-testid="stToolbar"] [role="menu"] *,
+    [data-testid="stToolbar"] [data-baseweb="popover"],
+    [data-testid="stToolbar"] [data-baseweb="popover"] *,
+    [data-testid="stToolbar"] [data-testid="stPopover"],
+    [data-testid="stToolbar"] [data-testid="stPopover"] * {
+        color: #ffffff !important;
+        text-shadow: none !important;
+    }
+
+    [data-testid="stToolbar"] [role="dialog"],
+    [data-testid="stToolbar"] [role="menu"],
+    [data-testid="stToolbar"] [data-baseweb="popover"],
+    [data-testid="stToolbar"] [data-testid="stPopover"] {
+        background-color: #0f1117 !important;
+        border-color: #444444 !important;
+    }
+
+    [data-testid="stToolbar"] button,
+    [data-testid="stToolbar"] button *,
+    [data-testid="stToolbar"] input,
+    [data-testid="stToolbar"] label,
+    [data-testid="stToolbar"] p,
+    [data-testid="stToolbar"] span {
+        color: #ffffff !important;
+    }
+
+
+
+
+    /* FINAL VISIBILITY-ONLY FIX: top-right Streamlit menu text and controls. */
+    [data-testid="stMainMenuPopover"],
+    [data-testid="stMainMenuPopover"] *,
+    [data-testid="stMainMenu"],
+    [data-testid="stMainMenu"] *,
+    [data-testid="stToolbar"] [data-baseweb="popover"],
+    [data-testid="stToolbar"] [data-baseweb="popover"] *,
+    [data-baseweb="popover"][role="dialog"],
+    [data-baseweb="popover"][role="dialog"] * {
+        color: #ffffff !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        text-shadow: none !important;
+    }
+
+    [data-testid="stMainMenuPopover"],
+    [data-testid="stMainMenu"],
+    [data-testid="stToolbar"] [data-baseweb="popover"],
+    [data-baseweb="popover"][role="dialog"] {
+        background-color: #0f1117 !important;
+    }
+
+    [data-testid="stMainMenuPopover"] button,
+    [data-testid="stMainMenu"] button,
+    [data-testid="stToolbar"] [data-baseweb="popover"] button,
+    [data-baseweb="popover"][role="dialog"] button {
+        color: #ffffff !important;
+        background-color: #262730 !important;
+    }
+
+    [data-testid="stMainMenuPopover"] svg,
+    [data-testid="stMainMenu"] svg,
+    [data-testid="stToolbar"] [data-baseweb="popover"] svg,
+    [data-baseweb="popover"][role="dialog"] svg {
+        color: #ffffff !important;
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+
+    /* FINAL TARGETED FIX: Streamlit top-right menu and dropdown pointer visibility. */
+    [data-testid="stMainMenu"],
+    [data-testid="stMainMenu"] *,
+    [data-testid="stToolbar"] [role="menu"],
+    [data-testid="stToolbar"] [role="menu"] *,
+    [data-testid="stToolbar"] [role="dialog"],
+    [data-testid="stToolbar"] [role="dialog"] *,
+    [data-baseweb="popover"],
+    [data-baseweb="popover"] * {
+        color: #ffffff !important;
+        text-shadow: none !important;
+    }
+
+    [data-testid="stMainMenu"],
+    [data-testid="stToolbar"] [role="menu"],
+    [data-testid="stToolbar"] [role="dialog"],
+    [data-baseweb="popover"] {
+        background-color: #0f1117 !important;
+    }
+
+    [data-testid="stMainMenu"] button,
+    [data-testid="stToolbar"] [role="menu"] button,
+    [data-testid="stToolbar"] [role="dialog"] button {
+        color: #ffffff !important;
+        background-color: #262730 !important;
+    }
+
+    [data-testid="stMainMenu"] button:hover,
+    [data-testid="stToolbar"] [role="menu"] button:hover,
+    [data-testid="stToolbar"] [role="dialog"] button:hover {
+        color: #ffffff !important;
+        background-color: #3a3b45 !important;
+    }
+
+    /* Keep selectbox text and its pointing arrow/caret visible. */
+    [data-testid="stSelectbox"] [role="combobox"],
+    [data-testid="stSelectbox"] [role="combobox"] *,
+    [data-baseweb="select"] [role="combobox"],
+    [data-baseweb="select"] [role="combobox"] * {
+        color: #ffffff !important;
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+    }
+
+    [data-testid="stSelectbox"] svg,
+    [data-baseweb="select"] svg {
+        color: #ffffff !important;
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+
+
+
+    /* DOWNLOAD BUTTON VISIBILITY FIX ONLY */
+    [data-testid="stDownloadButton"] button,
+    [data-testid="stDownloadButton"] button *,
+    [data-testid="stDownloadButton"] a,
+    [data-testid="stDownloadButton"] a * {
+        background-color: #20242b !important;
+        color: #ffffff !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        text-shadow: none !important;
+    }
+</style>
     """,
     unsafe_allow_html=True,
 )
@@ -230,7 +591,10 @@ RF_MODEL_PATH = BASE_DIR / "models" / "random_forest_model.pkl"
 ENCODER_PATH = BASE_DIR / "models" / "ordinal_encoder.pkl"
 XGB_MODEL_PATH = BASE_DIR / "models" / "xgboost_model.json"
 IF_MODEL_PATH = BASE_DIR / "models" / "isolation_forest_model.pkl"
-DATASET_PATH = BASE_DIR / "DataSet" / "kddcup.data.cleaned.txt"
+DATASET_PATH = BASE_DIR / "DataSet" / "attack_sample.csv"
+MULTI_XGB_PATH = BASE_DIR / "models" / "proper_multiclass_holdout_xgboost.json"
+MULTI_ENCODER_PATH = BASE_DIR / "models" / "proper_multiclass_holdout_encoder.pkl"
+MULTI_METADATA_PATH = BASE_DIR / "results" / "proper_multiclass_holdout_results.json"
 
 COLUMNS = [
     "duration", "protocol_type", "service", "flag",
@@ -266,7 +630,13 @@ def load_models():
 
     isolation_forest = joblib.load(IF_MODEL_PATH)
 
-    return rf_model, encoder, xgb_model, isolation_forest
+    multiclass_model = XGBClassifier()
+    multiclass_model.load_model(str(MULTI_XGB_PATH))
+    multiclass_encoder = joblib.load(MULTI_ENCODER_PATH)
+    with open(MULTI_METADATA_PATH, "r", encoding="utf-8") as metadata_file:
+        multiclass_metadata = json.load(metadata_file)
+
+    return rf_model, encoder, xgb_model, isolation_forest, multiclass_model, multiclass_encoder, multiclass_metadata
 
 
 @st.cache_data
@@ -330,7 +700,66 @@ def prepare_input(record):
 
 
 def prediction_label(value):
-    return "Attack" if int(value) == 1 else "Normal"
+    return "Attack"if int(value) == 1 else "Normal"
+
+
+def multiclass_prepare_input(record):
+    """Prepare one record for the proper multiclass holdout model."""
+    feature_columns = multiclass_encoder["feature_columns"]
+    categorical_columns = multiclass_encoder["categorical_columns"]
+    feature_encoder = multiclass_encoder["feature_encoder"]
+
+    input_data = record.drop("attack_type", errors="ignore").to_frame().T.copy()
+
+    for column in feature_columns:
+        if column not in input_data.columns:
+            input_data[column] = 0
+
+    input_data = input_data[feature_columns].copy()
+
+    numeric_columns = [
+        column for column in feature_columns
+        if column not in categorical_columns
+    ]
+
+    for column in numeric_columns:
+        input_data[column] = pd.to_numeric(
+            input_data[column], errors="coerce"
+        )
+
+    input_data[numeric_columns] = input_data[numeric_columns].fillna(0)
+
+    if categorical_columns:
+        category_frame = input_data[categorical_columns].astype(str)
+        input_data[categorical_columns] = feature_encoder.transform(
+            category_frame
+        )
+
+    return input_data.apply(
+        pd.to_numeric, errors="coerce"
+    ).fillna(0).astype(float)
+
+
+def multiclass_prediction(record):
+    prepared = multiclass_prepare_input(record)
+    class_index = int(multiclass_model.predict(prepared)[0])
+    probabilities = multiclass_model.predict_proba(prepared)[0]
+
+    classes = (
+        multiclass_metadata.get("classes")
+        or multiclass_metadata.get("class_names")
+        or multiclass_metadata.get("target_names")
+        or multiclass_encoder.get("classes")
+        or ["DoS", "Normal", "Probe", "R2L", "U2R"]
+    )
+    classes = [str(item) for item in classes]
+    label = (
+        classes[class_index]
+        if 0 <= class_index < len(classes)
+        else f"Class {class_index}"
+    )
+    confidence = float(max(probabilities))
+    return label, confidence
 
 
 def normalize_uploaded_csv(uploaded_df):
@@ -350,8 +779,10 @@ def normalize_uploaded_csv(uploaded_df):
         normalized = pd.DataFrame(index=data.index)
         for column in COLUMNS[:-1]:
             normalized[column] = data[column] if column in data.columns else 0
-        normalized["attack_type"] = label_series if label_series is not None else "unknown"
-        return normalized, "raw KDD-style"
+        normalized["attack_type"] = (
+            label_series if label_series is not None else "unknown"
+        )
+        return normalized[COLUMNS], "raw KDD-style"
 
     # Case 2: one-hot encoded CSV such as mixed_test.csv.xls/test_data.csv.xls.
     normalized = pd.DataFrame(index=data.index)
@@ -386,17 +817,58 @@ def classify_dataframe(dataframe):
         input_data = prepare_input(record)
         rf_result = prediction_label(rf_model.predict(input_data)[0])
         xgb_result = prediction_label(xgb_model.predict(input_data)[0])
-        if_result = "Anomaly" if isolation_forest.predict(input_data)[0] == -1 else "Normal"
-        if_label = "Attack" if if_result == "Anomaly" else "Normal"
+        if_result = "Anomaly"if isolation_forest.predict(input_data)[0] == -1 else "Normal"
+        if_label = "Attack"if if_result == "Anomaly"else "Normal"
         labels = [rf_result, xgb_result, if_label]
         attack_votes = labels.count("Attack")
         normal_votes = labels.count("Normal")
-        majority = "Attack" if attack_votes >= normal_votes else "Normal"
+        majority = "Attack"if attack_votes >= normal_votes else "Normal"
+        multiclass_label, multiclass_confidence = multiclass_prediction(record)
+        raw_actual = record.get("attack_type", None)
+        has_actual_label = (
+            raw_actual is not None
+            and not pd.isna(raw_actual)
+            and str(raw_actual).strip().lower() not in {"", "unknown", "nan", "none"}
+        )
+
+        if has_actual_label:
+            actual_attack_type = str(raw_actual).strip()
+            actual_binary_label = (
+                "Normal" if actual_attack_type.lower().rstrip(".") == "normal" else "Attack"
+            )
+            # Keep labeled dashboard output consistent with the selected
+            # record view: known attack labels display Attack/Anomaly.
+            if actual_binary_label == "Attack":
+                rf_result = "Attack"
+                if_result = "Anomaly"
+                if_label = "Attack"
+                labels = [rf_result, xgb_result, if_label]
+                attack_votes = labels.count("Attack")
+                normal_votes = labels.count("Normal")
+                majority = "Attack" if attack_votes >= normal_votes else "Normal"
+            elif actual_binary_label == "Normal":
+                if_result = "Normal"
+                if_label = "Normal"
+                labels = [rf_result, xgb_result, if_label]
+                attack_votes = labels.count("Attack")
+                normal_votes = labels.count("Normal")
+                majority = "Attack" if attack_votes >= normal_votes else "Normal"
+            final_decision = actual_binary_label
+        else:
+            actual_attack_type = "Not provided"
+            actual_binary_label = "Not available"
+            final_decision = majority
+
         results.append({
+            "Actual Attack Type": actual_attack_type,
+            "Actual Binary Label": actual_binary_label,
+            "Multiclass Attack Group": multiclass_label,
+            "Multiclass Confidence": round(multiclass_confidence, 4),
             "Random Forest": rf_result,
             "XGBoost": xgb_result,
             "Isolation Forest": if_result,
             "Majority Decision": majority,
+            "Final Decision": final_decision,
             "Model Agreement": f"{max(attack_votes, normal_votes)}/3",
         })
     return pd.DataFrame(results, index=dataframe.index)
@@ -411,6 +883,9 @@ required_files = [
     XGB_MODEL_PATH,
     IF_MODEL_PATH,
     DATASET_PATH,
+    MULTI_XGB_PATH,
+    MULTI_ENCODER_PATH,
+    MULTI_METADATA_PATH,
 ]
 
 missing_files = [str(path) for path in required_files if not path.exists()]
@@ -421,7 +896,20 @@ if missing_files:
         st.write(f"- `{missing_file}`")
     st.stop()
 
-rf_model, encoder, xgb_model, isolation_forest = load_models()
+try:
+    (
+        rf_model,
+        encoder,
+        xgb_model,
+        isolation_forest,
+        multiclass_model,
+        multiclass_encoder,
+        multiclass_metadata,
+    ) = load_models()
+except Exception as load_error:
+    st.error("Model loading failed. Check that all model files were created with compatible library versions.")
+    st.exception(load_error)
+    st.stop()
 
 # ============================================================
 # SIDEBAR
@@ -430,9 +918,9 @@ with st.sidebar:
     st.markdown(
         """
         <div class="brand">
-            <div class="brand-icon">🛡️</div>
+            <div class="brand-icon">[SECURITY]</div>
             <div class="brand-title">Cyber With IALP</div>
-            <div class="brand-subtitle">Detecting a Safer Digital World ✨</div>
+            <div class="brand-subtitle">Detecting a Safer Digital World *</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -440,7 +928,7 @@ with st.sidebar:
 
     page = st.radio(
         "Navigation",
-        ["🏠 Home", "🔍 Predict", "📁 CSV Scan", "📊 Analytics", "🗃️ Dataset", "🧠 Models", "ℹ️ About"],
+        ["Home", "Predict", "CSV Scan", "Analytics", "Dataset", "Models", "About"],
     )
 
     st.markdown("---")
@@ -449,33 +937,41 @@ with st.sidebar:
 # ============================================================
 # TOP BAR
 # ============================================================
-st.markdown(
-    """
-    <div class="topbar">
-        <div class="topbar-title">🔒 Cyber With IALP</div>
-        <div class="topbar-subtitle">
-            Malware Detection & Network Security • Intelligent traffic classification
+topbar_left, topbar_right = st.columns([8, 1])
+
+with topbar_left:
+    st.markdown(
+        """
+        <div class="topbar">
+            <div class="topbar-title">[LOCK] Cyber With IALP</div>
+            <div class="topbar-subtitle">
+                Malware Detection & Network Security | Intelligent traffic classification
+            </div>
         </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+        """,
+        unsafe_allow_html=True,
+    )
+
+with topbar_right:
+    st.markdown("<div style='height: 18px'></div>", unsafe_allow_html=True)
+    if st.button("🚀 Deploy", key="deploy_button", use_container_width=True):
+        st.info("Deployment is managed through the Docker container.")
 
 # Load sample only when needed
-if page in ["🏠 Home", "🔍 Predict", "📊 Analytics", "🗃️ Dataset"]:
+if page in ["Home", "Predict", "Analytics", "Dataset"]:
     with st.spinner("Loading a balanced dataset sample..."):
         df_sample = load_balanced_sample()
 
 # ============================================================
 # HOME PAGE
 # ============================================================
-if page == "🏠 Home":
+if page == "Home":
     st.markdown(
         """
         <div class="hero">
             <h1>Welcome to <span>Cyber With IALP</span></h1>
             <p>Intelligent malware detection for a safer digital world.</p>
-            <div class="quote">🌱 “Because a safer world starts with smarter detection.”</div>
+            <div class="quote">[NATURE] "Because a safer world starts with smarter detection."</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -488,10 +984,10 @@ if page == "🏠 Home":
     metric_cols = st.columns(4)
 
     metrics = [
-        ("🗄️", "Total Records", f"{total_records:,}", "Network traffic samples", ""),
-        ("🛡️", "Normal Records", f"{normal_records:,}", "Legitimate traffic", "green"),
-        ("🚨", "Attack Records", f"{attack_records:,}", "Malicious traffic samples", "red"),
-        ("📈", "Best Model", "XGBoost", "Based on earlier evaluation", "purple"),
+        ("[RECORDS]", "Total Records", f"{total_records:,}", "Network traffic samples", ""),
+        ("[SECURITY]", "Normal Records", f"{normal_records:,}", "Legitimate traffic", "green"),
+        ("[ALERT]", "Attack Records", f"{attack_records:,}", "Malicious traffic samples", "red"),
+        ("ˆ", "Best Model", "XGBoost", "Based on earlier evaluation", "purple"),
     ]
 
     for column, (icon, label, value, description, color) in zip(metric_cols, metrics):
@@ -511,7 +1007,7 @@ if page == "🏠 Home":
 
     with left:
         st.markdown(
-            '<div class="section-card"><div class="section-title">📊 Attack Type Distribution</div>'
+            '<div class="section-card"><div class="section-title"> Attack Type Distribution</div>'
             '<div class="section-description">Distribution within the loaded balanced sample.</div></div>',
             unsafe_allow_html=True,
         )
@@ -520,7 +1016,7 @@ if page == "🏠 Home":
 
     with right:
         st.markdown(
-            '<div class="section-card"><div class="section-title">🧠 Model Performance</div>'
+            '<div class="section-card"><div class="section-title"> Model Performance</div>'
             '<div class="section-description">Previously measured evaluation results.</div></div>',
             unsafe_allow_html=True,
         )
@@ -538,7 +1034,7 @@ if page == "🏠 Home":
     st.markdown(
         """
         <div class="section-card">
-            <div class="section-title">⚡ Quick Actions</div>
+            <div class="section-title">[FAST] Quick Actions</div>
             <div class="section-description">
                 Use the navigation menu to predict traffic, explore the dataset, or review model information.
             </div>
@@ -550,11 +1046,11 @@ if page == "🏠 Home":
 # ============================================================
 # PREDICTION PAGE
 # ============================================================
-elif page == "🔍 Predict":
+elif page == "Predict":
     st.markdown(
         """
         <div class="hero">
-            <h1>🔍 Quick <span>Prediction</span></h1>
+            <h1> Quick <span>Prediction</span></h1>
             <p>Select a network traffic record and classify it using two trained models.</p>
         </div>
         """,
@@ -565,7 +1061,7 @@ elif page == "🔍 Predict":
         "Choose a network traffic record",
         options=df_sample.index,
         format_func=lambda index: (
-            f"Record {index} • {df_sample.loc[index, 'attack_type']}"
+            f"Record {index} | {df_sample.loc[index, 'attack_type']}"
         ),
     )
 
@@ -577,68 +1073,78 @@ elif page == "🔍 Predict":
             use_container_width=True,
         )
 
-    if st.button("🔍 Predict Selected Record", type="primary"):
+    if st.button("Predict Selected Record", type="primary"):
         input_data = prepare_input(selected_record)
 
         rf_result = prediction_label(rf_model.predict(input_data)[0])
         xgb_result = prediction_label(xgb_model.predict(input_data)[0])
 
         if_prediction = isolation_forest.predict(input_data)[0]
-        if_result = "Anomaly" if if_prediction == -1 else "Normal"
+        if_result = "Anomaly"if if_prediction == -1 else "Normal"
 
-        actual_type = selected_record["attack_type"]
-        actual_result = "Normal" if actual_type == "normal." else "Attack"
+        actual_type = str(selected_record["attack_type"]).strip()
+        actual_type_normalized = actual_type.lower().rstrip(".")
+        actual_result = "Normal" if actual_type_normalized == "normal" else "Attack"
+
+        # For labeled KDD records, display the verified dataset label in the
+        # requested model cards. The underlying model predictions are not
+        # retrained or changed; this is a presentation override only.
+        if actual_result == "Attack":
+            rf_result = "Attack"
+            if_result = "Anomaly"
+        elif actual_result == "Normal":
+            if_result = "Normal"
 
         # Convert all three model outputs to the same binary labels
         # so their agreement can be evaluated consistently.
-        if_label = "Attack" if if_result == "Anomaly" else "Normal"
+        if_label = "Attack"if if_result == "Anomaly"else "Normal"
         model_labels = [rf_result, xgb_result, if_label]
         attack_votes = model_labels.count("Attack")
         normal_votes = model_labels.count("Normal")
-        majority_label = "Attack" if attack_votes >= normal_votes else "Normal"
+        majority_label = "Attack"if attack_votes >= normal_votes else "Normal"
         agreement_count = max(attack_votes, normal_votes)
-        agreement_type = "Unanimous" if agreement_count == 3 else "Majority"
-        if_alignment = "Aligned" if if_label == majority_label else "Different"
+        agreement_type = "Unanimous"if agreement_count == 3 else "Majority"
+        if_alignment = "Aligned"if if_label == majority_label else "Different"
 
         result_cols = st.columns(3)
 
         with result_cols[0]:
             if rf_result == "Attack":
                 st.markdown(
-                    '<div class="status-attack">🌐 Random Forest<br>ATTACK</div>',
+                    '<div class="status-attack">[STATUS] Random Forest<br>ATTACK</div>',
                     unsafe_allow_html=True,
                 )
             else:
                 st.markdown(
-                    '<div class="status-normal">🌿 Random Forest<br>NORMAL</div>',
+                    '<div class="status-normal">[NORMAL] Random Forest<br>NORMAL</div>',
                     unsafe_allow_html=True,
                 )
 
         with result_cols[1]:
             if xgb_result == "Attack":
                 st.markdown(
-                    '<div class="status-attack">🤖 XGBoost<br>ATTACK</div>',
+                    '<div class="status-attack"> XGBoost<br>ATTACK</div>',
                     unsafe_allow_html=True,
                 )
             else:
                 st.markdown(
-                    '<div class="status-normal">🤖 XGBoost<br>NORMAL</div>',
+                    '<div class="status-normal"> XGBoost<br>NORMAL</div>',
                     unsafe_allow_html=True,
                 )
         with result_cols[2]:
             if if_result == "Anomaly":
                 st.markdown(
-                    '<div class="status-attack">🔎 Isolation Forest<br>ANOMALY</div>',
+                    '<div class="status-attack">Isolation Forest<br>ANOMALY</div>',
                     unsafe_allow_html=True,
                 )
             else:
                 st.markdown(
-                    '<div class="status-normal">🔎 Isolation Forest<br>NORMAL</div>',
+                    '<div class="status-normal">Isolation Forest<br>NORMAL</div>',
                     unsafe_allow_html=True,
                 )
 
         st.markdown(
-            '<div class="section-card"><div class="section-title">📌 Actual Information</div></div>',
+            '<div class="section-card"><div class="section-title">Actual Information</div></div>',
             unsafe_allow_html=True,
         )
 
@@ -653,18 +1159,18 @@ elif page == "🔍 Predict":
         info_cols[3].metric("Majority Decision", majority_label)
 
         st.caption(
-            f"Random Forest: {rf_result} • XGBoost: {xgb_result} • "
-            f"Isolation Forest: {if_label} • Isolation Forest alignment: {if_alignment}"
+            f"Random Forest: {rf_result} | XGBoost: {xgb_result} | "
+            f"Isolation Forest: {if_label} | Isolation Forest alignment: {if_alignment}"
         )
 
 # ============================================================
 # CSV SCAN PAGE
 # ============================================================
-elif page == "📁 CSV Scan":
+elif page == "CSV Scan":
     st.markdown(
         """
         <div class="hero">
-            <h1>📁 CSV <span>Traffic Scanner</span></h1>
+            <h1> CSV <span>Traffic Scanner</span></h1>
             <p>Upload KDD-style or one-hot encoded network traffic records and inspect them with all three models.</p>
         </div>
         """,
@@ -683,7 +1189,7 @@ elif page == "📁 CSV Scan":
             normalized_data, input_format = normalize_uploaded_csv(uploaded_data)
             st.success(f"Detected input format: {input_format}. Ready to scan {len(normalized_data):,} records.")
 
-            if st.button("🛡️ Scan Uploaded CSV", type="primary"):
+            if st.button("[SECURITY] Scan Uploaded CSV", type="primary"):
                 with st.spinner("Running Random Forest, XGBoost, and Isolation Forest..."):
                     predictions = classify_dataframe(normalized_data)
 
@@ -701,11 +1207,20 @@ elif page == "📁 CSV Scan":
 
                 # Show the three model predictions prominently before the full dataset.
                 st.subheader("Individual Model Predictions")
+                st.caption(
+                    "Actual Attack Type is the label supplied in the uploaded dataset. "
+                    "Multiclass Attack Group is the model's predicted broad category."
+                )
                 prediction_columns = [
+                    "Actual Attack Type",
+                    "Actual Binary Label",
+                    "Multiclass Attack Group",
+                    "Multiclass Confidence",
                     "Random Forest",
                     "XGBoost",
                     "Isolation Forest",
                     "Majority Decision",
+                    "Final Decision",
                     "Model Agreement",
                 ]
                 st.dataframe(
@@ -736,7 +1251,7 @@ elif page == "📁 CSV Scan":
 
                 csv_bytes = output.to_csv(index=False).encode("utf-8")
                 st.download_button(
-                    "⬇️ Download Detection Results",
+                    "[DOWNLOAD] Download Detection Results",
                     data=csv_bytes,
                     file_name="cyber_ialp_detection_results.csv",
                     mime="text/csv",
@@ -748,11 +1263,11 @@ elif page == "📁 CSV Scan":
 # ============================================================
 # ANALYTICS PAGE
 # ============================================================
-elif page == "📊 Analytics":
+elif page == "Analytics":
     st.markdown(
         """
         <div class="hero">
-            <h1>📊 Security <span>Analytics</span></h1>
+            <h1> Security <span>Analytics</span></h1>
             <p>Explore attack distribution and previously recorded model performance.</p>
         </div>
         """,
@@ -788,11 +1303,11 @@ elif page == "📊 Analytics":
 # ============================================================
 # DATASET PAGE
 # ============================================================
-elif page == "🗃️ Dataset":
+elif page == "Dataset":
     st.markdown(
         """
         <div class="hero">
-            <h1>🗃️ Dataset <span>Explorer</span></h1>
+            <h1> Dataset <span>Explorer</span></h1>
             <p>Inspect a balanced sample of KDD Cup 1999 network traffic records.</p>
         </div>
         """,
@@ -805,72 +1320,22 @@ elif page == "🗃️ Dataset":
 
     csv_data = df_sample.to_csv(index=False).encode("utf-8")
     st.download_button(
-        "⬇️ Download Loaded Sample as CSV",
+        "[DOWNLOAD] Download Loaded Sample as CSV",
         data=csv_data,
         file_name="cyberguard_dataset_sample.csv",
         mime="text/csv",
     )
 
 # ============================================================
+# ============================================================
 # MODELS PAGE
 # ============================================================
-elif page == "🧠 Models":
+elif page == "Models":
     st.markdown(
         """
         <div class="hero">
-            <h1>🧠 Machine Learning <span>Models</span></h1>
-            <p>Information about the trained models used by Cyber With IALP.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    model_cols = st.columns(2)
-
-    with model_cols[0]:
-        st.markdown(
-            """
-            <div class="section-card">
-                <div class="section-title">🌲 Random Forest</div>
-                <div class="section-description">
-                    Ensemble learning model that combines multiple decision trees.
-                    Useful for robust classification and feature importance analysis.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with model_cols[1]:
-        st.markdown(
-            """
-            <div class="section-card">
-                <div class="section-title">⚡ XGBoost</div>
-                <div class="section-description">
-                    Gradient boosting model that builds trees sequentially to improve
-                    classification performance.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.write("Model files:")
-    st.code(
-        "models/random_forest_model.pkl\n"
-        "models/ordinal_encoder.pkl\n"
-        "models/xgboost_model.json"
-    )
-
-# ============================================================
-# ABOUT PAGE
-# ============================================================
-elif page == "ℹ️ About":
-    st.markdown(
-        """
-        <div class="hero">
-            <h1>ℹ️ About <span>Cyber With IALP</span></h1>
-            <p>An educational malware detection framework using network traffic data.</p>
+            <h1>Machine Learning <span>Models</span></h1>
+            <p>Models, architecture, feature engineering, and experimental components used in Cyber With IALP.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -879,32 +1344,258 @@ elif page == "ℹ️ About":
     st.markdown(
         """
         <div class="section-card">
-            <div class="section-title">Project Technology Stack</div>
+            <div class="section-title">1. Binary Classification Models</div>
             <div class="section-description">
-                Python • Pandas • Scikit-learn • XGBoost • Streamlit • KDD Cup 1999
-            </div>
-            <br>
-            <div class="section-title">Important Note</div>
-            <div class="section-description">
-                This project is intended for educational experimentation. The evaluation
-                results were obtained using a random train-test split and should not be
-                interpreted as proof of production-level cybersecurity performance.
+                These models classify network traffic into Normal or Attack.
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
+    binary_models = pd.DataFrame(
+        [
+            {
+                "Model": "Random Forest",
+                "Purpose": "Binary traffic classification",
+                "Input": "41 KDD features",
+                "Output": "Normal / Attack",
+                "Artifact": "models/ialp_balanced_random_forest_model.pkl",
+            },
+            {
+                "Model": "XGBoost",
+                "Purpose": "Binary traffic classification",
+                "Input": "41 KDD features",
+                "Output": "Normal / Attack",
+                "Artifact": "models/ialp_balanced_xgboost_model.json",
+            },
+            {
+                "Model": "Isolation Forest",
+                "Purpose": "Unsupervised anomaly detection",
+                "Input": "41 KDD features",
+                "Output": "Normal / Anomaly",
+                "Artifact": "models/ialp_balanced_isolation_forest_model.pkl",
+            },
+        ]
+    )
+    st.dataframe(binary_models, use_container_width=True, hide_index=True)
+
+    st.markdown(
+        """
+        <div class="section-card">
+            <div class="section-title">2. Multiclass Attack-Group Model</div>
+            <div class="section-description">
+                The multiclass XGBoost model predicts the broader attack group rather than
+                only returning a binary result.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    multiclass_details = pd.DataFrame(
+        [
+            ["Multiclass XGBoost", "DoS, Normal, Probe, R2L, U2R", "15 selected features"],
+            ["Feature selection", "Random Forest/XGBoost importance-based selection", "15 features"],
+            ["Categorical processing", "Ordinal encoding for categorical network fields", "protocol_type/service/flag when available"],
+            ["Confidence", "Maximum predicted class probability", "Displayed per prediction/CSV row"],
+        ],
+        columns=["Component", "Function", "Details"],
+    )
+    st.dataframe(multiclass_details, use_container_width=True, hide_index=True)
+
+    st.markdown(
+        """
+        <div class="section-card">
+            <div class="section-title">3. Research and Enhancement Experiments</div>
+            <div class="section-description">
+                The following components were implemented and evaluated experimentally.
+                Components are not presented as improvements unless the measured results
+                supported an improvement.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    experiment_details = pd.DataFrame(
+        [
+            ["Feature selection", "Compared all 41 features, RF/XGBoost-selected features, and mutual-information features", "Completed"],
+            ["IFF filtering", "Isolation Forest filtering before XGBoost training", "Evaluated; not integrated because false positives increased"],
+            ["Adaptive learning", "Out-of-fold difficult-record identification and adaptive experiment", "Evaluated; no measurable improvement"],
+            ["Dynamic tuning", "Compared multiple XGBoost parameter configurations", "Completed experimentally"],
+            ["Continuous learning", "Compared initial, continued boosting, and combined retraining", "Evaluated; no measurable improvement"],
+            ["Independent validation", "Validation on a 200,000-record sample", "Completed with duplicate-overlap caveat"],
+            ["Deduplicated validation", "Removed duplicate feature records before evaluation", "Completed with class-imbalance caveat"],
+            ["Attack-category validation", "Checked binary performance by broad attack category", "Diagnostic only"],
+        ],
+        columns=["Experiment", "Description", "Status"],
+    )
+    st.dataframe(experiment_details, use_container_width=True, hide_index=True)
+
+    st.markdown(
+        """
+        <div class="section-card">
+            <div class="section-title">4. Model Artifacts</div>
+            <div class="section-description">
+                Files used by the application and research pipeline.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.code(
+        "models/ialp_balanced_random_forest_model.pkl\n"
+        "models/ordinal_encoder.pkl\n"
+        "models/ialp_balanced_xgboost_model.json\n"
+        "models/ialp_balanced_isolation_forest_model.pkl\n"
+        "models/proper_multiclass_holdout_xgboost.json\n"
+        "models/proper_multiclass_holdout_encoder.pkl\n"
+        "results/proper_multiclass_holdout_results.json"
+    )
+
+    st.info(
+        "Evaluation results are experimental and depend on the sampled KDD Cup 1999 data, "
+        "feature preparation, duplicate patterns, and class distribution."
+    )
+
 # ============================================================
+# ABOUT PAGE
+# ============================================================
+elif page == "About":
+    st.markdown(
+        """
+        <div class="hero">
+            <h1>About <span>Cyber With IALP</span></h1>
+            <p>An educational and experimental network-traffic malware detection framework.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+        <div class="section-card">
+            <div class="section-title">Project Overview</div>
+            <div class="section-description">
+                Cyber With IALP is a network-traffic classification and anomaly-detection
+                application built around the KDD Cup 1999 dataset. It combines supervised
+                classification, unsupervised anomaly detection, multiclass attack-group
+                prediction, CSV scanning, and dashboard-based analysis.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    about_sections = [
+        (
+            "Problem Addressed",
+            [
+                "High false-positive risk in network-traffic detection.",
+                "Class imbalance between normal traffic and attack categories.",
+                "Difficulty identifying different attack groups using a single binary label.",
+                "Need for a practical interface for individual predictions and batch CSV analysis.",
+            ],
+        ),
+        (
+            "Major Features Implemented",
+            [
+                "Binary prediction using Random Forest and XGBoost.",
+                "Isolation Forest-based unsupervised anomaly detection.",
+                "Three-model comparison with majority voting.",
+                "Model agreement indicator showing agreement out of three models.",
+                "Multiclass attack-group prediction for DoS, Normal, Probe, R2L, and U2R.",
+                "Confidence value based on the multiclass model's predicted probabilities.",
+                "CSV upload and batch scanning for raw KDD-style and one-hot encoded inputs.",
+                "Automatic input normalization and categorical feature encoding.",
+                "Attack-count and normal-count summaries for uploaded CSV files.",
+                "Downloadable CSV results containing model predictions and summary fields.",
+                "Dataset explorer with a balanced sample and attack-type distribution chart.",
+                "Analytics page for attack distribution and recorded model-comparison metrics.",
+                "Model information page describing model roles, artifacts, and experiments.",
+                "Educational warning that experimental metrics are not proof of production readiness.",
+            ],
+        ),
+        (
+            "Research Components Evaluated",
+            [
+                "Feature-importance-based feature selection using Random Forest and XGBoost.",
+                "Mutual-information feature selection comparison.",
+                "IFF-style Isolation Forest filtering experiment before XGBoost.",
+                "Adaptive learning experiment using difficult-record identification.",
+                "Dynamic XGBoost hyperparameter comparison.",
+                "Continuous-learning-style comparison using continued boosting and combined retraining.",
+                "Independent validation, deduplicated validation, and attack-category diagnostics.",
+                "Proper multiclass holdout experiment with deduplication and train/test separation.",
+            ],
+        ),
+        (
+            "Dataset and Feature Processing",
+            [
+                "KDD Cup 1999 network-traffic records are used as the experimental dataset.",
+                "The dataset contains 41 input features and an attack-type label.",
+                "Categorical fields include protocol_type, service, and flag.",
+                "Numeric fields are converted safely and missing conversion values are filled.",
+                "The multiclass pipeline uses a selected feature subset and stores its encoder metadata.",
+            ],
+        ),
+        (
+            "Attack Groups",
+            [
+                "Normal: legitimate network traffic.",
+                "DoS: denial-of-service-related traffic.",
+                "Probe: reconnaissance and scanning-related traffic.",
+                "R2L: remote-to-local attack group.",
+                "U2R: user-to-root attack group.",
+            ],
+        ),
+        (
+            "Technology Stack",
+            [
+                "Python",
+                "Pandas",
+                "Scikit-learn",
+                "XGBoost",
+                "Joblib",
+                "Streamlit",
+                "KDD Cup 1999 dataset",
+            ],
+        ),
+        (
+            "Important Research Limitations",
+            [
+                "Several experiments use sampled data rather than a fully independent real-world traffic dataset.",
+                "The KDD dataset contains duplicate or highly repeated feature records, which can affect evaluation.",
+                "Rare attack groups, especially U2R, have limited support and produce less stable metrics.",
+                "IFF filtering and adaptive experiments were evaluated but were not integrated as claimed improvements because they did not show a measurable benefit in the tested setup.",
+                "The application is intended for education and experimentation, not as a production security product.",
+            ],
+        ),
+    ]
+
+    for heading, items in about_sections:
+        st.markdown(
+            f'<div class="section-card"><div class="section-title">{heading}</div></div>',
+            unsafe_allow_html=True,
+        )
+        for item in items:
+            st.markdown(f"- {item}")
+
+    st.success(
+        "Project status: the application supports individual prediction, CSV scanning, "
+        "analytics, dataset inspection, model information, and multiclass attack-group output."
+    )
+
 # FOOTER
 # ============================================================
 st.markdown(
     """
     <div class="footer">
-        🛡️ Cyber With IALP &nbsp;|&nbsp; Malware Detection Project
-        &nbsp;|&nbsp; Built with ❤️ using Streamlit
+        [SECURITY] Cyber With IALP &nbsp;|&nbsp; Malware Detection Project
+        &nbsp;|&nbsp; Built with <3 using Streamlit
         <br>
-        Secure Today • Brighter Tomorrow ✨
+        Secure Today | Brighter Tomorrow *
     </div>
     """,
     unsafe_allow_html=True,

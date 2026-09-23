@@ -11,7 +11,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY app.py .
 COPY models ./models
-COPY DataSet/kddcup.data.cleaned.txt ./DataSet/kddcup.data.cleaned.txt
+COPY results ./results
+COPY DataSet/attack_sample.csv ./DataSet/attack_sample.csv
 
 EXPOSE 8501
 
