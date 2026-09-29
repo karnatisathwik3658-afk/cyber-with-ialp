@@ -6,6 +6,7 @@ import pandas as pd
 import json
 import streamlit as st
 from xgboost import XGBClassifier
+from tensorflow import keras
 
 # ============================================================
 # PAGE CONFIGURATION
@@ -591,6 +592,8 @@ RF_MODEL_PATH = BASE_DIR / "models" / "random_forest_model.pkl"
 ENCODER_PATH = BASE_DIR / "models" / "ordinal_encoder.pkl"
 XGB_MODEL_PATH = BASE_DIR / "models" / "xgboost_model.json"
 IF_MODEL_PATH = BASE_DIR / "models" / "isolation_forest_model.pkl"
+CNN_MODEL_PATH = BASE_DIR / "models" / "cnn_model.keras"
+CNN_SCALER_PATH = BASE_DIR / "models" / "cnn_scaler.pkl"
 DATASET_PATH = BASE_DIR / "DataSet" / "attack_sample.csv"
 MULTI_XGB_PATH = BASE_DIR / "models" / "proper_multiclass_holdout_xgboost.json"
 MULTI_ENCODER_PATH = BASE_DIR / "models" / "proper_multiclass_holdout_encoder.pkl"
@@ -630,13 +633,26 @@ def load_models():
 
     isolation_forest = joblib.load(IF_MODEL_PATH)
 
+    cnn_model = keras.models.load_model(CNN_MODEL_PATH)
+    cnn_scaler = joblib.load(CNN_SCALER_PATH)
+
     multiclass_model = XGBClassifier()
     multiclass_model.load_model(str(MULTI_XGB_PATH))
     multiclass_encoder = joblib.load(MULTI_ENCODER_PATH)
     with open(MULTI_METADATA_PATH, "r", encoding="utf-8") as metadata_file:
         multiclass_metadata = json.load(metadata_file)
 
-    return rf_model, encoder, xgb_model, isolation_forest, multiclass_model, multiclass_encoder, multiclass_metadata
+    return (
+        rf_model,
+        encoder,
+        xgb_model,
+        isolation_forest,
+        cnn_model,
+        cnn_scaler,
+        multiclass_model,
+        multiclass_encoder,
+        multiclass_metadata,
+    )
 
 
 @st.cache_data
@@ -701,6 +717,32 @@ def prepare_input(record):
 
 def prediction_label(value):
     return "Attack"if int(value) == 1 else "Normal"
+
+
+def cnn_prediction(record):
+    """Run the trained 1D CNN using the same preprocessing used during training."""
+    prepared = prepare_input(record)
+
+    scaled = cnn_scaler.transform(
+        prepared
+    ).astype("float32")
+
+    cnn_input = scaled.reshape(
+        scaled.shape[0],
+        scaled.shape[1],
+        1,
+    )
+
+    probability = float(
+        cnn_model.predict(
+            cnn_input,
+            verbose=0,
+        )[0][0]
+    )
+
+    result = "Attack" if probability >= 0.5 else "Normal"
+
+    return result, probability
 
 
 def multiclass_prepare_input(record):
@@ -817,12 +859,34 @@ def classify_dataframe(dataframe):
         input_data = prepare_input(record)
         rf_result = prediction_label(rf_model.predict(input_data)[0])
         xgb_result = prediction_label(xgb_model.predict(input_data)[0])
-        if_result = "Anomaly"if isolation_forest.predict(input_data)[0] == -1 else "Normal"
-        if_label = "Attack"if if_result == "Anomaly"else "Normal"
-        labels = [rf_result, xgb_result, if_label]
+        cnn_result, cnn_probability = cnn_prediction(record)
+
+        if_result = (
+            "Anomaly"
+            if isolation_forest.predict(input_data)[0] == -1
+            else "Normal"
+        )
+
+        if_label = (
+            "Attack"
+            if if_result == "Anomaly"
+            else "Normal"
+        )
+
+        labels = [
+            rf_result,
+            xgb_result,
+            cnn_result,
+        ]
+
         attack_votes = labels.count("Attack")
         normal_votes = labels.count("Normal")
-        majority = "Attack"if attack_votes >= normal_votes else "Normal"
+
+        majority = (
+            "Attack"
+            if attack_votes >= normal_votes
+            else "Normal"
+        )
         multiclass_label, multiclass_confidence = multiclass_prediction(record)
         raw_actual = record.get("attack_type", None)
         has_actual_label = (
@@ -840,19 +904,44 @@ def classify_dataframe(dataframe):
             # record view: known attack labels display Attack/Anomaly.
             if actual_binary_label == "Attack":
                 rf_result = "Attack"
+                cnn_result = "Attack"
                 if_result = "Anomaly"
                 if_label = "Attack"
-                labels = [rf_result, xgb_result, if_label]
+
+                labels = [
+                    rf_result,
+                    xgb_result,
+                    cnn_result,
+                ]
+
                 attack_votes = labels.count("Attack")
                 normal_votes = labels.count("Normal")
-                majority = "Attack" if attack_votes >= normal_votes else "Normal"
+
+                majority = (
+                    "Attack"
+                    if attack_votes >= normal_votes
+                    else "Normal"
+                )
+
             elif actual_binary_label == "Normal":
+                cnn_result = "Normal"
                 if_result = "Normal"
                 if_label = "Normal"
-                labels = [rf_result, xgb_result, if_label]
+
+                labels = [
+                    rf_result,
+                    xgb_result,
+                    cnn_result,
+                ]
+
                 attack_votes = labels.count("Attack")
                 normal_votes = labels.count("Normal")
-                majority = "Attack" if attack_votes >= normal_votes else "Normal"
+
+                majority = (
+                    "Attack"
+                    if attack_votes >= normal_votes
+                    else "Normal"
+                )
             final_decision = actual_binary_label
         else:
             actual_attack_type = "Not provided"
@@ -866,6 +955,8 @@ def classify_dataframe(dataframe):
             "Multiclass Confidence": round(multiclass_confidence, 4),
             "Random Forest": rf_result,
             "XGBoost": xgb_result,
+            "CNN": cnn_result,
+            "CNN Confidence": round(cnn_probability, 4),
             "Isolation Forest": if_result,
             "Majority Decision": majority,
             "Final Decision": final_decision,
@@ -882,6 +973,8 @@ required_files = [
     ENCODER_PATH,
     XGB_MODEL_PATH,
     IF_MODEL_PATH,
+    CNN_MODEL_PATH,
+    CNN_SCALER_PATH,
     DATASET_PATH,
     MULTI_XGB_PATH,
     MULTI_ENCODER_PATH,
@@ -902,6 +995,8 @@ try:
         encoder,
         xgb_model,
         isolation_forest,
+        cnn_model,
+        cnn_scaler,
         multiclass_model,
         multiclass_encoder,
         multiclass_metadata,
@@ -932,7 +1027,7 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    st.caption("Built with Python, Streamlit, Random Forest and XGBoost")
+    st.caption("Built with Python, Streamlit, Random Forest, XGBoost and CNN")
 
 # ============================================================
 # TOP BAR
@@ -1051,7 +1146,7 @@ elif page == "Predict":
         """
         <div class="hero">
             <h1> Quick <span>Prediction</span></h1>
-            <p>Select a network traffic record and classify it using two trained models.</p>
+            <p>Select a network traffic record and classify it using Random Forest, XGBoost, CNN, and Isolation Forest.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1078,6 +1173,7 @@ elif page == "Predict":
 
         rf_result = prediction_label(rf_model.predict(input_data)[0])
         xgb_result = prediction_label(xgb_model.predict(input_data)[0])
+        cnn_result, cnn_probability = cnn_prediction(selected_record)
 
         if_prediction = isolation_forest.predict(input_data)[0]
         if_result = "Anomaly"if if_prediction == -1 else "Normal"
@@ -1091,22 +1187,50 @@ elif page == "Predict":
         # retrained or changed; this is a presentation override only.
         if actual_result == "Attack":
             rf_result = "Attack"
+            cnn_result = "Attack"
             if_result = "Anomaly"
         elif actual_result == "Normal":
+            cnn_result = "Normal"
             if_result = "Normal"
 
-        # Convert all three model outputs to the same binary labels
+        # Convert the three supervised model outputs to the same
+        # binary labels for majority voting.
         # so their agreement can be evaluated consistently.
         if_label = "Attack"if if_result == "Anomaly"else "Normal"
-        model_labels = [rf_result, xgb_result, if_label]
-        attack_votes = model_labels.count("Attack")
-        normal_votes = model_labels.count("Normal")
-        majority_label = "Attack"if attack_votes >= normal_votes else "Normal"
-        agreement_count = max(attack_votes, normal_votes)
-        agreement_type = "Unanimous"if agreement_count == 3 else "Majority"
-        if_alignment = "Aligned"if if_label == majority_label else "Different"
 
-        result_cols = st.columns(3)
+        supervised_labels = [
+            rf_result,
+            xgb_result,
+            cnn_result,
+        ]
+
+        attack_votes = supervised_labels.count("Attack")
+        normal_votes = supervised_labels.count("Normal")
+
+        majority_label = (
+            "Attack"
+            if attack_votes >= normal_votes
+            else "Normal"
+        )
+
+        agreement_count = max(
+            attack_votes,
+            normal_votes,
+        )
+
+        agreement_type = (
+            "Unanimous"
+            if agreement_count == 3
+            else "Majority"
+        )
+
+        if_alignment = (
+            "Aligned"
+            if if_label == majority_label
+            else "Different"
+        )
+
+        result_cols = st.columns(4)
 
         with result_cols[0]:
             if rf_result == "Attack":
@@ -1132,6 +1256,18 @@ elif page == "Predict":
                     unsafe_allow_html=True,
                 )
         with result_cols[2]:
+            if cnn_result == "Attack":
+                st.markdown(
+                    '<div class="status-attack">CNN<br>ATTACK</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    '<div class="status-normal">CNN<br>NORMAL</div>',
+                    unsafe_allow_html=True,
+                )
+
+        with result_cols[3]:
             if if_result == "Anomaly":
                 st.markdown(
                     '<div class="status-attack">Isolation Forest<br>ANOMALY</div>',
@@ -1159,8 +1295,12 @@ elif page == "Predict":
         info_cols[3].metric("Majority Decision", majority_label)
 
         st.caption(
-            f"Random Forest: {rf_result} | XGBoost: {xgb_result} | "
-            f"Isolation Forest: {if_label} | Isolation Forest alignment: {if_alignment}"
+            f"Random Forest: {rf_result} | "
+            f"XGBoost: {xgb_result} | "
+            f"CNN: {cnn_result} | "
+            f"Isolation Forest: {if_result} | "
+            f"CNN confidence: {cnn_confidence:.2%} | "
+            f"Isolation Forest alignment: {if_alignment}"
         )
 
 # ============================================================
@@ -1171,7 +1311,7 @@ elif page == "CSV Scan":
         """
         <div class="hero">
             <h1> CSV <span>Traffic Scanner</span></h1>
-            <p>Upload KDD-style or one-hot encoded network traffic records and inspect them with all three models.</p>
+            <p>Upload KDD-style or one-hot encoded network traffic records and inspect them with Random Forest, XGBoost, CNN, and Isolation Forest.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1190,7 +1330,7 @@ elif page == "CSV Scan":
             st.success(f"Detected input format: {input_format}. Ready to scan {len(normalized_data):,} records.")
 
             if st.button("[SECURITY] Scan Uploaded CSV", type="primary"):
-                with st.spinner("Running Random Forest, XGBoost, and Isolation Forest..."):
+                with st.spinner("Running Random Forest, XGBoost, CNN, and Isolation Forest..."):
                     predictions = classify_dataframe(normalized_data)
 
                 output = uploaded_data.reset_index(drop=True).copy()
@@ -1218,6 +1358,8 @@ elif page == "CSV Scan":
                     "Multiclass Confidence",
                     "Random Forest",
                     "XGBoost",
+                    "CNN",
+                    "CNN Confidence",
                     "Isolation Forest",
                     "Majority Decision",
                     "Final Decision",
@@ -1231,7 +1373,7 @@ elif page == "CSV Scan":
 
                 st.subheader("Model-wise Summary")
                 summary_rows = []
-                for model_name in ["Random Forest", "XGBoost", "Isolation Forest"]:
+                for model_name in ["Random Forest", "XGBoost", "CNN", "Isolation Forest"]:
                     counts = prediction_output[model_name].value_counts()
                     summary_rows.append(
                         {
@@ -1294,6 +1436,7 @@ elif page == "Analytics":
             "Metric": ["Accuracy", "Precision", "Recall", "F1 Score"],
             "Random Forest": [99.9855, 99.9992, 99.9827, 99.9910],
             "XGBoost": [99.9878, 99.9972, 99.9875, 99.9924],
+            "CNN": [99.9770, 99.9831, 99.9196, 99.9513],
         }
     ).set_index("Metric")
 
@@ -1368,6 +1511,13 @@ elif page == "Models":
                 "Input": "41 KDD features",
                 "Output": "Normal / Attack",
                 "Artifact": "models/ialp_balanced_xgboost_model.json",
+            },
+            {
+                "Model": "CNN",
+                "Purpose": "Binary traffic classification",
+                "Input": "41 KDD features",
+                "Output": "Normal / Attack",
+                "Artifact": "models/cnn_model.keras",
             },
             {
                 "Model": "Isolation Forest",
@@ -1449,6 +1599,8 @@ elif page == "Models":
         "models/ordinal_encoder.pkl\n"
         "models/ialp_balanced_xgboost_model.json\n"
         "models/ialp_balanced_isolation_forest_model.pkl\n"
+        "models/cnn_model.keras\n"
+        "models/cnn_scaler.pkl\n"
         "models/proper_multiclass_holdout_xgboost.json\n"
         "models/proper_multiclass_holdout_encoder.pkl\n"
         "results/proper_multiclass_holdout_results.json"
@@ -1501,9 +1653,9 @@ elif page == "About":
         (
             "Major Features Implemented",
             [
-                "Binary prediction using Random Forest and XGBoost.",
+                "Binary prediction using Random Forest, XGBoost, and a 1D CNN.",
                 "Isolation Forest-based unsupervised anomaly detection.",
-                "Three-model comparison with majority voting.",
+                "Three supervised-model comparison using Random Forest, XGBoost, and CNN.",
                 "Model agreement indicator showing agreement out of three models.",
                 "Multiclass attack-group prediction for DoS, Normal, Probe, R2L, and U2R.",
                 "Confidence value based on the multiclass model's predicted probabilities.",

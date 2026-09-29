@@ -5,3 +5,4 @@ scikit-learn
 xgboost-cpu==3.4.1
 joblib
 matplotlib
+tensorflow==2.21.0

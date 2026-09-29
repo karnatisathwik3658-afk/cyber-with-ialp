@@ -1,6 +1,9 @@
-# Dataset files
+# Large dataset files
 DataSet/*.txt
 DataSet/*.csv
+
+# Allow deployment sample
+!DataSet/attack_sample.csv
 
 # Python cache
 __pycache__/
@@ -15,9 +18,6 @@ venv/
 
 # Secrets
 .env
-
-# Entire dataset folder
-DataSet/
 
 # Local backup file
 app_code_backup.txt
