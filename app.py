@@ -853,41 +853,26 @@ def normalize_uploaded_csv(uploaded_df):
 
 
 def classify_dataframe(dataframe):
-    """Run all three models for every uploaded row."""
+    """Run the trained models on every uploaded row without using the supplied label as an input."""
     results = []
     for _, record in dataframe.iterrows():
         input_data = prepare_input(record)
+
         rf_result = prediction_label(rf_model.predict(input_data)[0])
         xgb_result = prediction_label(xgb_model.predict(input_data)[0])
         cnn_result, cnn_probability = cnn_prediction(record)
 
-        if_result = (
-            "Anomaly"
-            if isolation_forest.predict(input_data)[0] == -1
-            else "Normal"
-        )
+        if_prediction = isolation_forest.predict(input_data)[0]
+        if_result = "Anomaly" if if_prediction == -1 else "Normal"
+        if_label = "Attack" if if_result == "Anomaly" else "Normal"
 
-        if_label = (
-            "Attack"
-            if if_result == "Anomaly"
-            else "Normal"
-        )
+        supervised_labels = [rf_result, xgb_result, cnn_result]
+        attack_votes = supervised_labels.count("Attack")
+        normal_votes = supervised_labels.count("Normal")
+        majority = "Attack" if attack_votes >= normal_votes else "Normal"
 
-        labels = [
-            rf_result,
-            xgb_result,
-            cnn_result,
-        ]
-
-        attack_votes = labels.count("Attack")
-        normal_votes = labels.count("Normal")
-
-        majority = (
-            "Attack"
-            if attack_votes >= normal_votes
-            else "Normal"
-        )
         multiclass_label, multiclass_confidence = multiclass_prediction(record)
+
         raw_actual = record.get("attack_type", None)
         has_actual_label = (
             raw_actual is not None
@@ -900,53 +885,9 @@ def classify_dataframe(dataframe):
             actual_binary_label = (
                 "Normal" if actual_attack_type.lower().rstrip(".") == "normal" else "Attack"
             )
-            # Keep labeled dashboard output consistent with the selected
-            # record view: known attack labels display Attack/Anomaly.
-            if actual_binary_label == "Attack":
-                rf_result = "Attack"
-                cnn_result = "Attack"
-                if_result = "Anomaly"
-                if_label = "Attack"
-
-                labels = [
-                    rf_result,
-                    xgb_result,
-                    cnn_result,
-                ]
-
-                attack_votes = labels.count("Attack")
-                normal_votes = labels.count("Normal")
-
-                majority = (
-                    "Attack"
-                    if attack_votes >= normal_votes
-                    else "Normal"
-                )
-
-            elif actual_binary_label == "Normal":
-                cnn_result = "Normal"
-                if_result = "Normal"
-                if_label = "Normal"
-
-                labels = [
-                    rf_result,
-                    xgb_result,
-                    cnn_result,
-                ]
-
-                attack_votes = labels.count("Attack")
-                normal_votes = labels.count("Normal")
-
-                majority = (
-                    "Attack"
-                    if attack_votes >= normal_votes
-                    else "Normal"
-                )
-            final_decision = actual_binary_label
         else:
             actual_attack_type = "Not provided"
             actual_binary_label = "Not available"
-            final_decision = majority
 
         results.append({
             "Actual Attack Type": actual_attack_type,
@@ -959,9 +900,11 @@ def classify_dataframe(dataframe):
             "CNN Confidence": round(cnn_probability, 4),
             "Isolation Forest": if_result,
             "Majority Decision": majority,
-            "Final Decision": final_decision,
+            "Final Decision": majority,
             "Model Agreement": f"{max(attack_votes, normal_votes)}/3",
+            "Isolation Forest Alignment": "Aligned" if if_label == majority else "Different",
         })
+
     return pd.DataFrame(results, index=dataframe.index)
 
 
@@ -1082,7 +1025,7 @@ if page == "Home":
         ("[RECORDS]", "Total Records", f"{total_records:,}", "Network traffic samples", ""),
         ("[SECURITY]", "Normal Records", f"{normal_records:,}", "Legitimate traffic", "green"),
         ("[ALERT]", "Attack Records", f"{attack_records:,}", "Malicious traffic samples", "red"),
-        ("ˆ", "Best Model", "XGBoost", "Based on earlier evaluation", "purple"),
+        ("[MODEL]", "Proposed Model", "IFF + XGBoost", "Research paper architecture", "purple"),
     ]
 
     for column, (icon, label, value, description, color) in zip(metric_cols, metrics):
@@ -1146,7 +1089,7 @@ elif page == "Predict":
         """
         <div class="hero">
             <h1> Quick <span>Prediction</span></h1>
-            <p>Select a network traffic record and classify it using Random Forest, XGBoost, CNN, and Isolation Forest.</p>
+            <p>Select a network traffic record and compare the trained Random Forest, XGBoost, CNN, and Isolation Forest outputs.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1181,17 +1124,6 @@ elif page == "Predict":
         actual_type = str(selected_record["attack_type"]).strip()
         actual_type_normalized = actual_type.lower().rstrip(".")
         actual_result = "Normal" if actual_type_normalized == "normal" else "Attack"
-
-        # For labeled KDD records, display the verified dataset label in the
-        # requested model cards. The underlying model predictions are not
-        # retrained or changed; this is a presentation override only.
-        if actual_result == "Attack":
-            rf_result = "Attack"
-            cnn_result = "Attack"
-            if_result = "Anomaly"
-        elif actual_result == "Normal":
-            cnn_result = "Normal"
-            if_result = "Normal"
 
         # Convert the three supervised model outputs to the same
         # binary labels for majority voting.
@@ -1280,13 +1212,13 @@ elif page == "Predict":
                 )
 
         st.markdown(
-            '<div class="section-card"><div class="section-title">Actual Information</div></div>',
+            '<div class="section-card"><div class="section-title">Dataset Reference Information</div></div>',
             unsafe_allow_html=True,
         )
 
         info_cols = st.columns(4)
         info_cols[0].metric("Actual Attack Type", actual_type)
-        info_cols[1].metric("Actual Label", actual_result)
+        info_cols[1].metric("Dataset Label", actual_result)
         info_cols[2].metric(
             "Model Agreement",
             f"{agreement_count}/3",
@@ -1299,7 +1231,7 @@ elif page == "Predict":
             f"XGBoost: {xgb_result} | "
             f"CNN: {cnn_result} | "
             f"Isolation Forest: {if_result} | "
-            f"CNN confidence: {cnn_confidence:.2%} | "
+            f"CNN confidence: {cnn_probability:.2%} | "
             f"Isolation Forest alignment: {if_alignment}"
         )
 
@@ -1311,7 +1243,7 @@ elif page == "CSV Scan":
         """
         <div class="hero">
             <h1> CSV <span>Traffic Scanner</span></h1>
-            <p>Upload KDD-style or one-hot encoded network traffic records and inspect them with Random Forest, XGBoost, CNN, and Isolation Forest.</p>
+            <p>Upload KDD-style or one-hot encoded network traffic records and compare the trained Random Forest, XGBoost, CNN, and Isolation Forest outputs.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1330,7 +1262,7 @@ elif page == "CSV Scan":
             st.success(f"Detected input format: {input_format}. Ready to scan {len(normalized_data):,} records.")
 
             if st.button("[SECURITY] Scan Uploaded CSV", type="primary"):
-                with st.spinner("Running Random Forest, XGBoost, CNN, and Isolation Forest..."):
+                with st.spinner("Running the trained Random Forest, XGBoost, CNN, and Isolation Forest models..."):
                     predictions = classify_dataframe(normalized_data)
 
                 output = uploaded_data.reset_index(drop=True).copy()
@@ -1348,7 +1280,7 @@ elif page == "CSV Scan":
                 # Show the three model predictions prominently before the full dataset.
                 st.subheader("Individual Model Predictions")
                 st.caption(
-                    "Actual Attack Type is the label supplied in the uploaded dataset. "
+                    "Actual Attack Type is the label supplied in the uploaded dataset and is shown only for comparison. "
                     "Multiclass Attack Group is the model's predicted broad category."
                 )
                 prediction_columns = [
@@ -1443,6 +1375,25 @@ elif page == "Analytics":
     st.bar_chart(comparison)
     st.dataframe(comparison.style.format("{:.4f}%"), use_container_width=True)
 
+    st.markdown(
+        '<div class="section-card"><div class="section-title">Research Paper Reference</div>'
+        '<div class="section-description">Reported performance of the proposed IFF-XGBoost model in the research paper.</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    paper_comparison = pd.DataFrame(
+        {
+            "Metric": ["Testing Accuracy", "Precision", "Recall", "F1 Score"],
+            "Proposed IFF-XGBoost": [99.49, 99.50, 99.49, 99.49],
+        }
+    ).set_index("Metric")
+    st.dataframe(paper_comparison.style.format("{:.2f}%"), use_container_width=True)
+    st.caption(
+        "The paper reports these values for its proposed IFF-XGBoost experiment. "
+        "They are shown separately from the models executed by this Streamlit application."
+    )
+
+
 # ============================================================
 # DATASET PAGE
 # ============================================================
@@ -1503,14 +1454,14 @@ elif page == "Models":
                 "Purpose": "Binary traffic classification",
                 "Input": "41 KDD features",
                 "Output": "Normal / Attack",
-                "Artifact": "models/ialp_balanced_random_forest_model.pkl",
+                "Artifact": "models/random_forest_model.pkl",
             },
             {
                 "Model": "XGBoost",
                 "Purpose": "Binary traffic classification",
                 "Input": "41 KDD features",
                 "Output": "Normal / Attack",
-                "Artifact": "models/ialp_balanced_xgboost_model.json",
+                "Artifact": "models/xgboost_model.json",
             },
             {
                 "Model": "CNN",
@@ -1524,7 +1475,7 @@ elif page == "Models":
                 "Purpose": "Unsupervised anomaly detection",
                 "Input": "41 KDD features",
                 "Output": "Normal / Anomaly",
-                "Artifact": "models/ialp_balanced_isolation_forest_model.pkl",
+                "Artifact": "models/isolation_forest_model.pkl",
             },
         ]
     )
@@ -1586,7 +1537,22 @@ elif page == "Models":
     st.markdown(
         """
         <div class="section-card">
-            <div class="section-title">4. Model Artifacts</div>
+            <div class="section-title">4. Research Paper Architecture</div>
+            <div class="section-description">
+                The paper describes an IALP workflow using preprocessing, heuristic feature reduction,
+                Isolation Forest-based filtering, adaptive learning, and XGBoost for multiclass attack classification.
+                The Streamlit application exposes the trained model artifacts available in this project and keeps
+                the paper's reported IFF-XGBoost result separate from live application predictions.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+        <div class="section-card">
+            <div class="section-title">5. Model Artifacts</div>
             <div class="section-description">
                 Files used by the application and research pipeline.
             </div>
@@ -1595,10 +1561,10 @@ elif page == "Models":
         unsafe_allow_html=True,
     )
     st.code(
-        "models/ialp_balanced_random_forest_model.pkl\n"
+        "models/random_forest_model.pkl\n"
         "models/ordinal_encoder.pkl\n"
-        "models/ialp_balanced_xgboost_model.json\n"
-        "models/ialp_balanced_isolation_forest_model.pkl\n"
+        "models/xgboost_model.json\n"
+        "models/isolation_forest_model.pkl\n"
         "models/cnn_model.keras\n"
         "models/cnn_scaler.pkl\n"
         "models/proper_multiclass_holdout_xgboost.json\n"
@@ -1655,7 +1621,7 @@ elif page == "About":
             [
                 "Binary prediction using Random Forest, XGBoost, and a 1D CNN.",
                 "Isolation Forest-based unsupervised anomaly detection.",
-                "Three supervised-model comparison using Random Forest, XGBoost, and CNN.",
+                "Three supervised-model comparison using Random Forest, XGBoost, and CNN, with Isolation Forest shown separately for anomaly detection.",
                 "Model agreement indicator showing agreement out of three models.",
                 "Multiclass attack-group prediction for DoS, Normal, Probe, R2L, and U2R.",
                 "Confidence value based on the multiclass model's predicted probabilities.",
@@ -1674,7 +1640,7 @@ elif page == "About":
             [
                 "Feature-importance-based feature selection using Random Forest and XGBoost.",
                 "Mutual-information feature selection comparison.",
-                "IFF-style Isolation Forest filtering experiment before XGBoost.",
+                "IFF-style Isolation Forest filtering experiment before XGBoost, evaluated separately from the live application prediction path.",
                 "Adaptive learning experiment using difficult-record identification.",
                 "Dynamic XGBoost hyperparameter comparison.",
                 "Continuous-learning-style comparison using continued boosting and combined retraining.",
