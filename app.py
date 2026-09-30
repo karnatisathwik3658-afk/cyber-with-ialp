@@ -619,6 +619,48 @@ COLUMNS = [
 
 CATEGORICAL_COLUMNS = ["protocol_type", "service", "flag"]
 
+# ============================================================
+# FULL KDD CUP 1999 DATASET METADATA
+# ============================================================
+# The deployed app uses a small balanced sample for interactive model
+# prediction. The following verified counts describe the complete
+# kddcup.data file used in this project (4,898,430 cleaned records).
+# This avoids loading ~4.9 million rows into Streamlit Cloud memory.
+FULL_DATASET_RECORDS = 4_898_430
+FULL_NORMAL_RECORDS = 972_780
+FULL_ATTACK_RECORDS = 3_925_650
+
+FULL_ATTACK_DISTRIBUTION = {
+    "normal.": 972_780,
+    "smurf.": 2_807_886,
+    "neptune.": 1_072_017,
+    "satan.": 15_892,
+    "ipsweep.": 12_481,
+    "portsweep.": 10_413,
+    "back.": 2_203,
+    "nmap.": 2_316,
+    "teardrop.": 979,
+    "warezclient.": 1_020,
+    "pod.": 264,
+    "guess_passwd.": 53,
+    "buffer_overflow.": 30,
+    "land.": 21,
+    "warezmaster.": 20,
+    "imap.": 12,
+    "rootkit.": 10,
+    "loadmodule.": 9,
+    "ftp_write.": 8,
+    "multihop.": 7,
+    "phf.": 4,
+    "perl.": 3,
+    "spy.": 2,
+}
+
+FULL_DISTRIBUTION_DF = pd.DataFrame(
+    list(FULL_ATTACK_DISTRIBUTION.items()),
+    columns=["Attack Type", "Records"],
+).sort_values("Records", ascending=False)
+
 
 # ============================================================
 # LOADING FUNCTIONS
@@ -1015,9 +1057,11 @@ if page == "Home":
         unsafe_allow_html=True,
     )
 
-    total_records = len(df_sample)
-    normal_records = int((df_sample["attack_type"] == "normal.").sum())
-    attack_records = total_records - normal_records
+    # Dashboard statistics represent the complete KDD Cup 1999 file.
+    # df_sample remains a small interactive preview for prediction.
+    total_records = FULL_DATASET_RECORDS
+    normal_records = FULL_NORMAL_RECORDS
+    attack_records = FULL_ATTACK_RECORDS
 
     metric_cols = st.columns(4)
 
@@ -1049,8 +1093,19 @@ if page == "Home":
             '<div class="section-description">Distribution within the loaded balanced sample.</div></div>',
             unsafe_allow_html=True,
         )
-        distribution = df_sample["attack_type"].value_counts().head(10)
-        st.bar_chart(distribution)
+        st.caption(
+            "Complete distribution across all 4,898,430 records in the cleaned KDD Cup 1999 dataset."
+        )
+        st.bar_chart(
+            FULL_DISTRIBUTION_DF.set_index("Attack Type")["Records"],
+            use_container_width=True,
+        )
+        st.dataframe(
+            FULL_DISTRIBUTION_DF.reset_index(drop=True),
+            use_container_width=True,
+            hide_index=True,
+            height=420,
+        )
 
     with right:
         st.markdown(
@@ -1060,11 +1115,11 @@ if page == "Home":
         )
         performance = pd.DataFrame(
             {
-                "Model": ["Random Forest", "XGBoost"],
-                "Accuracy": [99.9855, 99.9878],
-                "Precision": [99.9992, 99.9972],
-                "Recall": [99.9827, 99.9875],
-                "F1 Score": [99.9910, 99.9924],
+                "Model": ["Random Forest", "XGBoost", "CNN"],
+                "Accuracy": [99.9855, 99.9878, 99.9770],
+                "Precision": [99.9992, 99.9972, 99.9831],
+                "Recall": [99.9827, 99.9875, 99.9196],
+                "F1 Score": [99.9910, 99.9924, 99.9513],
             }
         ).set_index("Model")
         st.dataframe(performance.style.format("{:.4f}%"), use_container_width=True)
@@ -1348,14 +1403,21 @@ elif page == "Analytics":
         unsafe_allow_html=True,
     )
 
-    attack_distribution = df_sample["attack_type"].value_counts()
-
     st.markdown(
         '<div class="section-card"><div class="section-title">Attack Type Distribution</div>'
-        '<div class="section-description">Top attack categories in the balanced sample.</div></div>',
+        '<div class="section-description">Complete distribution across the cleaned KDD Cup 1999 dataset.</div></div>',
         unsafe_allow_html=True,
     )
-    st.bar_chart(attack_distribution.head(15))
+    st.bar_chart(
+        FULL_DISTRIBUTION_DF.set_index("Attack Type")["Records"],
+        use_container_width=True,
+    )
+    st.dataframe(
+        FULL_DISTRIBUTION_DF.reset_index(drop=True),
+        use_container_width=True,
+        hide_index=True,
+        height=420,
+    )
 
     st.markdown(
         '<div class="section-card"><div class="section-title">Model Comparison</div>'
@@ -1408,15 +1470,31 @@ elif page == "Dataset":
         unsafe_allow_html=True,
     )
 
-    st.write(f"Loaded records: **{len(df_sample):,}**")
-    st.write(f"Number of features including attack type: **{df_sample.shape[1]}**")
+    st.metric("Full KDD Cup 1999 Records", f"{FULL_DATASET_RECORDS:,}")
+    st.write(f"Number of features including attack type: **{len(COLUMNS)}**")
+    st.caption(
+        "The complete dataset statistics are shown below. "
+        "A 1,000-row balanced preview is used for interactive predictions so the "
+        "Streamlit Cloud app does not attempt to render 4.9 million rows in the browser."
+    )
+
+    st.subheader("Complete Attack-Type Distribution")
+    st.dataframe(
+        FULL_DISTRIBUTION_DF.reset_index(drop=True),
+        use_container_width=True,
+        hide_index=True,
+        height=520,
+    )
+
+    st.subheader("Interactive Dataset Preview")
+    st.write(f"Preview records loaded for prediction: **{len(df_sample):,}**")
     st.dataframe(df_sample.head(100), use_container_width=True)
 
     csv_data = df_sample.to_csv(index=False).encode("utf-8")
     st.download_button(
-        "[DOWNLOAD] Download Loaded Sample as CSV",
+        "[DOWNLOAD] Download Interactive Preview as CSV",
         data=csv_data,
-        file_name="cyberguard_dataset_sample.csv",
+        file_name="cyber_ialp_dataset_preview.csv",
         mime="text/csv",
     )
 
